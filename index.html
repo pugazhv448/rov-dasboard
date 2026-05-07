@@ -1,0 +1,1069 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ROV Dashboard</title>
+  <link rel="manifest" href="/manifest.json">
+  <meta name="theme-color" content="#0a0f1e">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+  
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    /* CSS Reset and base styles */
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+        background-color: #0a0f1e;
+        color: white;
+        font-family: 'DM Sans', sans-serif;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+    }
+    h1, h2, h3, h4, h5, h6, .rajdhani { font-family: 'Rajdhani', sans-serif; }
+
+    /* 1. TOP NAVBAR */
+    #navbar {
+        height: 60px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 15px;
+        background-color: #0a0f1e;
+        border-bottom: 1px solid #1a2a4a;
+        transition: background-color 0.3s;
+        flex-shrink: 0;
+    }
+    #nav-left { display: flex; align-items: center; font-family: 'Rajdhani', sans-serif; font-size: 18px; font-weight: 700; letter-spacing: 1px;}
+    #nav-center { font-family: 'Rajdhani', sans-serif; font-size: 20px; font-weight: 600; color: #00e5ff;}
+    #nav-right { font-family: 'Rajdhani', sans-serif; font-size: 12px; font-weight: 600; padding: 4px 8px; border-radius: 4px; background: rgba(0, 255, 0, 0.1); color: #39ff14; }
+
+    /* 2. MAIN CONTENT AREA */
+    #main-content {
+        flex: 1;
+        display: flex;
+        padding: 10px;
+        gap: 10px;
+        overflow: hidden;
+    }
+
+    /* LEFT COLUMN */
+    #left-col {
+        width: 60%;
+        display: flex;
+        flex-direction: column;
+    }
+    .panel {
+        background-color: #0d1526;
+        border: 1px solid #1a2a4a;
+        border-radius: 8px;
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+    }
+    .panel-header {
+        text-transform: uppercase;
+        color: #00e5ff;
+        letter-spacing: 2px;
+        font-size: 11px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 600;
+        padding: 8px 12px;
+        border-bottom: 1px solid #1a2a4a;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        flex-shrink: 0;
+    }
+    #camera-panel {
+        flex: 1;
+    }
+    #canvas-container {
+        flex: 1;
+        position: relative;
+        background-color: #0a1929;
+        border: 1px dashed #00e5ff;
+        margin: 10px;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        overflow: hidden;
+    }
+    #feed-canvas {
+        max-width: 100%;
+        max-height: 100%;
+        object-fit: contain;
+    }
+    #snap-btn {
+        position: absolute;
+        bottom: 10px;
+        right: 10px;
+        background: rgba(0, 229, 255, 0.2);
+        color: #00e5ff;
+        border: 1px solid #00e5ff;
+        padding: 6px 10px;
+        border-radius: 4px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        cursor: pointer;
+        z-index: 10;
+        transition: background 0.2s;
+    }
+    #snap-btn:active { background: #00e5ff; color: #0a0f1e; }
+    #live-badge {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(255, 0, 0, 0.2);
+        color: #ff3d57;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        font-size: 12px;
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        z-index: 10;
+    }
+    .blink { animation: blinker 1s linear infinite; }
+    @keyframes blinker { 50% { opacity: 0; } }
+
+    #detection-count-badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 229, 255, 0.2);
+        color: #00e5ff;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        font-size: 12px;
+        z-index: 10;
+    }
+
+
+    /* RIGHT COLUMN */
+    #right-col {
+        width: 40%;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+    }
+    #gps-panel {
+        height: 40%;
+        min-height: 150px;
+    }
+    #map-container {
+        flex: 1;
+        position: relative;
+        margin: 10px;
+        display: flex;
+        flex-direction: column;
+    }
+    #map {
+        flex: 1;
+        background-color: #0a1929;
+        min-height: 80px;
+    }
+    #gps-coords {
+        display: flex;
+        justify-content: space-between;
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 12px;
+        color: #00e5ff;
+        margin-top: 5px;
+    }
+
+    #log-panel {
+        flex: 1;
+        min-height: 200px;
+    }
+    #log-container {
+        flex: 1;
+        overflow-y: auto;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+    }
+    #clear-log-btn {
+        background: transparent;
+        color: #00e5ff;
+        border: 1px solid #00e5ff;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 10px;
+        cursor: pointer;
+    }
+    .log-entry {
+        font-family: monospace;
+        font-size: 11px;
+        padding: 6px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        animation: fadeIn 0.3s ease-in;
+    }
+    .log-entry:nth-child(odd) { background-color: #0d1526; }
+    .log-entry:nth-child(even) { background-color: #111d30; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+    /* 3. BOTTOM STATS BAR */
+    #stats-bar {
+        height: 55px;
+        display: flex;
+        background-color: #0a0f1e;
+        border-top: 1px solid #1a2a4a;
+        flex-shrink: 0;
+    }
+    .stat-card {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        border-top: 2px solid #00e5ff;
+        border-right: 1px solid #1a2a4a;
+    }
+    .stat-card:last-child { border-right: none; }
+    .stat-label { font-size: 10px; color: #8892b0; text-transform: uppercase; font-family: 'Rajdhani', sans-serif; letter-spacing: 1px;}
+    .stat-value { font-size: 14px; font-weight: bold; color: white; font-family: 'Rajdhani', sans-serif;}
+
+    /* 4. ALERT BANNER */
+    #alert-banner {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        background-color: #ff3d57;
+        color: white;
+        text-align: center;
+        padding: 10px 15px;
+        font-family: 'Rajdhani', sans-serif;
+        font-weight: 700;
+        font-size: 14px;
+        z-index: 1000;
+        display: none;
+        transform: translateY(-100%);
+        transition: transform 0.3s ease-out;
+        justify-content: space-between;
+        align-items: center;
+    }
+    #alert-banner.show {
+        transform: translateY(0);
+    }
+    #alert-dismiss {
+        background: none;
+        border: none;
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+        font-family: 'DM Sans', sans-serif;
+    }
+
+    /* LOADING SCREEN */
+    #loading-screen {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: #0a0f1e;
+        z-index: 2000;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+    }
+    #loading-text {
+        font-family: 'Rajdhani', sans-serif;
+        font-size: 24px;
+        color: white;
+        margin-bottom: 20px;
+    }
+    #progress-bar-container {
+        width: 200px;
+        height: 4px;
+        background-color: #1a2a4a;
+        border-radius: 2px;
+        overflow: hidden;
+    }
+    #progress-bar {
+        width: 0%;
+        height: 100%;
+        background-color: #00e5ff;
+        animation: loadProgress 8s linear forwards;
+    }
+    @keyframes loadProgress { to { width: 100%; } }
+
+    /* Leaflet map fix */
+    .leaflet-container { background: #0a1929; }
+    .rov-marker {
+        background-color: #00e5ff;
+        border-radius: 50%;
+        width: 14px;
+        height: 14px;
+        box-shadow: 0 0 0 rgba(0, 229, 255, 0.4);
+        animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0.4); }
+      70% { box-shadow: 0 0 0 10px rgba(0, 229, 255, 0); }
+      100% { box-shadow: 0 0 0 0 rgba(0, 229, 255, 0); }
+    }
+
+    /* Mobile responsive (390px width focus) */
+    @media (max-width: 768px) {
+        #main-content { flex-direction: column; overflow-y: auto; padding-bottom: 20px;}
+        #left-col, #right-col { width: 100%; }
+        #left-col { min-height: 350px; flex: none; }
+        #right-col { min-height: 500px; flex: none; }
+        #nav-left { font-size: 14px; }
+        #nav-center { font-size: 16px; }
+        #nav-right { font-size: 10px; }
+        .stat-label { font-size: 8px; }
+        .stat-value { font-size: 12px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loading-screen">
+    <div id="loading-text">🤖 Loading ROV Systems...</div>
+    <div id="progress-bar-container"><div id="progress-bar"></div></div>
+  </div>
+
+  <div id="alert-banner">
+    <span id="alert-text"></span>
+    <button id="alert-dismiss">✕</button>
+  </div>
+
+  <div id="navbar">
+    <div id="nav-left">🤖 ROV Dashboard</div>
+    <div id="nav-center" id="clock">00:00:00</div>
+    <div id="nav-right">● SYSTEM ONLINE</div>
+  </div>
+
+  <div id="main-content">
+    <div id="left-col">
+      <div class="panel" id="camera-panel">
+        <div class="panel-header">CAMERA FEED</div>
+        <div id="canvas-container">
+          <canvas id="feed-canvas"></canvas>
+          <div id="live-badge"><span class="blink">●</span> REC</div>
+          <div id="detection-count-badge">0 OBJECTS</div>
+          <button id="snap-btn">📷 SNAP</button>
+        </div>
+      </div>
+    </div>
+    <div id="right-col">
+      <div class="panel" id="gps-panel">
+        <div class="panel-header">GPS LOCATION</div>
+        <div id="map-container">
+          <div id="map">Map loading...</div>
+          <div id="gps-coords">
+            <span id="lat-display">LAT: --</span>
+            <span id="lng-display">LNG: --</span>
+          </div>
+        </div>
+      </div>
+      <div class="panel" id="log-panel">
+        <div class="panel-header">
+          DETECTION LOG
+          <button id="clear-log-btn">CLEAR LOG</button>
+        </div>
+        <div id="log-container">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="stats-bar">
+    <div class="stat-card">
+      <div class="stat-label">🔋 Battery</div>
+      <div class="stat-value" id="stat-batt">87%</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">📡 Signal</div>
+      <div class="stat-value" id="stat-sig">● Strong</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">🌡️ Temp</div>
+      <div class="stat-value" id="stat-temp">24.0°C</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">⚙️ Pressure</div>
+      <div class="stat-value" id="stat-pres">1.02 atm</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">⚡ Speed</div>
+      <div class="stat-value">0.8 m/s</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">🎯 Mode</div>
+      <div class="stat-value" id="stat-mode">Autonomous</div>
+    </div>
+  </div>
+
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.log('Service Worker registration failed: ', err);
+        });
+      });
+    }
+
+    // Global variables
+    let canvas = document.getElementById('feed-canvas');
+    let ctx = canvas.getContext('2d', { willReadFrequently: true });
+    let video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+
+    let cocoDetections = [];
+    let defectRegions = [];
+    let lastLogTime = new Map();
+    let lastAlertTime = 0;
+    let map;
+    let marker;
+    let cameraActive = false;
+    let gpsActive = false;
+    let objectCount = 0;
+    
+    // New variables for logs and heuristics
+    let logCooldowns = new Map();
+    let logFrequency = new Map();
+    let previousRegionCounts = { crack: 0, algae: 0, sludge: 0, corrosion: 0 };
+    let gpsWatchId = null;
+    let gpsRetryCount = 0;
+
+    // Initialize
+    async function init() {
+      await setupCamera();
+      startClock();
+      setupSnapshot();
+      setupClearLog();
+      setupMap();
+      setupGPS();
+      startStatsAnimation();
+      startSystemStatusLoop();
+      
+      // Start drawing loop
+      requestAnimationFrame(drawLoop);
+      
+      // Load TensorFlow
+      try {
+          const model = await cocoSsd.load();
+          document.getElementById('loading-screen').style.display = 'none';
+          
+          // Detection loops
+          setInterval(() => {
+            if(cameraActive && video.readyState === video.HAVE_ENOUGH_DATA) {
+              model.detect(canvas).then(predictions => {
+                cocoDetections = predictions;
+                objectCount = predictions.length;
+                document.getElementById('detection-count-badge').innerText = `${objectCount} OBJECTS`;
+                const ignoredObjects = ['dog', 'cat', 'bird', 'bear', 'sheep', 'cow', 'horse', 'elephant', 'zebra', 'giraffe', 'bed', 'sofa', 'toilet', 'tv', 'laptop', 'mouse', 'remote', 'keyboard', 'book', 'clock', 'vase', 'scissors', 'teddy bear', 'hair drier', 'toothbrush', 'apple', 'orange', 'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'dining table', 'potted plant', 'tie'];
+                predictions.forEach(p => {
+                  if(p.score > 0.65 && !ignoredObjects.includes(p.class.toLowerCase())) {
+                    addLog(p.class, '#00e5ff', Math.round(p.score * 100));
+                  }
+                });
+              }).catch(e => console.error(e));
+            }
+          }, 300);
+
+      } catch (err) {
+          console.error("TFJS Load Error", err);
+          document.getElementById('loading-screen').innerHTML = "<div style='color:#ff3d57;'>Error loading AI Models</div>";
+          setTimeout(() => { document.getElementById('loading-screen').style.display = 'none'; }, 2000);
+      }
+
+      setInterval(scanForDefects, 1200);
+      
+      addLog("SYSTEM — Initialized", "#00e5ff", 100);
+    }
+
+    // Camera Setup
+    async function setupCamera() {
+      try {
+        let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { exact: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } } });
+        video.srcObject = stream;
+        cameraActive = true;
+      } catch (err) {
+        try {
+          let stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+          video.srcObject = stream;
+          cameraActive = true;
+        } catch (err2) {
+          try {
+            let stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            cameraActive = true;
+          } catch (err3) {
+            // Render text on canvas
+            ctx.fillStyle = '#0a1929';
+            ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.fillStyle = '#ff3d57';
+            ctx.font = '20px DM Sans';
+            ctx.fillText("❌ Camera Access Denied", 50, 50);
+            cameraActive = false;
+            addLog("CAMERA — Error", "#ff3d57", 0);
+            return;
+          }
+        }
+      }
+      
+      video.addEventListener('loadedmetadata', () => {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        addLog("CAMERA — Ready", "#00e5ff", 100);
+      });
+    }
+
+    // Drawing Loop
+    function drawLoop() {
+      if (cameraActive && video.readyState === video.HAVE_ENOUGH_DATA) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        drawDetections();
+      }
+      requestAnimationFrame(drawLoop);
+    }
+
+    function drawDetections() {
+      // Draw COCO
+      if (cocoDetections && cocoDetections.length > 0) {
+        cocoDetections.forEach(det => {
+          if (det.score > 0.55) {
+            ctx.strokeStyle = '#00e5ff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3]);
+            
+            ctx.fillStyle = 'rgba(0, 229, 255, 0.08)';
+            ctx.fillRect(det.bbox[0], det.bbox[1], det.bbox[2], det.bbox[3]);
+            
+            ctx.fillStyle = '#00e5ff';
+            const textWidth = ctx.measureText(`${det.class.toUpperCase()} ${Math.round(det.score * 100)}%`).width;
+            ctx.fillRect(det.bbox[0], det.bbox[1] - 20, textWidth + 10, 20);
+            
+            ctx.fillStyle = '#ffffff';
+            ctx.font = 'bold 13px Rajdhani';
+            ctx.fillText(`${det.class.toUpperCase()} ${Math.round(det.score * 100)}%`, det.bbox[0] + 5, det.bbox[1] - 5);
+          }
+        });
+      }
+
+      // Draw Defects
+      if (defectRegions && defectRegions.length > 0) {
+        defectRegions.forEach(reg => {
+          ctx.strokeStyle = reg.color;
+          ctx.lineWidth = 2;
+          ctx.strokeRect(reg.bbox[0], reg.bbox[1], reg.bbox[2], reg.bbox[3]);
+          
+          let rgba = 'rgba(255,255,255,0.1)';
+          if (reg.color === '#ff3d57') rgba = 'rgba(255, 61, 87, 0.1)';
+          else if (reg.color === '#39ff14') rgba = 'rgba(57, 255, 20, 0.1)';
+          else if (reg.color === '#ff8c00') rgba = 'rgba(255, 140, 0, 0.1)';
+          else if (reg.color === '#ffd700') rgba = 'rgba(255, 215, 0, 0.1)';
+          
+          ctx.fillStyle = rgba;
+          ctx.fillRect(reg.bbox[0], reg.bbox[1], reg.bbox[2], reg.bbox[3]);
+          
+          ctx.fillStyle = reg.color;
+          const textWidth = ctx.measureText(reg.label).width;
+          ctx.fillRect(reg.bbox[0], reg.bbox[1] - 20, textWidth + 10, 20);
+          
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 13px Rajdhani';
+          ctx.fillText(reg.label, reg.bbox[0] + 5, reg.bbox[1] - 5);
+        });
+      }
+    }
+
+    // Defect Scanning
+    function scanForDefects() {
+      if (!cameraActive || video.readyState !== video.HAVE_ENOUGH_DATA) return;
+      
+      const width = canvas.width;
+      const height = canvas.height;
+      if (width === 0 || height === 0) return;
+
+      const imgData = ctx.getImageData(0, 0, width, height).data;
+      const blockSize = 24;
+      const cols = Math.floor(width / blockSize);
+      const rows = Math.floor(height / blockSize);
+      
+      const getPixel = (x, y) => {
+        if (x < 0) x = 0; if (x >= width) x = width - 1;
+        if (y < 0) y = 0; if (y >= height) y = height - 1;
+        const idx = (Math.floor(y) * width + Math.floor(x)) * 4;
+        return { R: imgData[idx], G: imgData[idx+1], B: imgData[idx+2] };
+      };
+
+      let blocks = [];
+      for(let r=0; r<rows; r++) {
+        for(let c=0; c<cols; c++) {
+          const cx = c * blockSize + blockSize/2;
+          const cy = r * blockSize + blockSize/2;
+          const offset = blockSize / 4;
+          
+          const p1 = getPixel(cx, cy);
+          const p2 = getPixel(cx - offset, cy - offset);
+          const p3 = getPixel(cx + offset, cy - offset);
+          const p4 = getPixel(cx - offset, cy + offset);
+          const p5 = getPixel(cx + offset, cy + offset);
+          
+          const R = (p1.R + p2.R + p3.R + p4.R + p5.R) / 5;
+          const G = (p1.G + p2.G + p3.G + p4.G + p5.G) / 5;
+          const B = (p1.B + p2.B + p3.B + p4.B + p5.B) / 5;
+          const bright = (R+G+B)/3;
+          
+          let type = 'none';
+          if (bright < 20) {
+            type = 'crack';
+          } else if (G > R + 40 && G > B + 30 && G > 110) {
+            type = 'algae';
+          } else if (!(R > 140 && G > 90 && B > 70 && R > G && R > B) && 
+                     R >= 30 && R <= 85 && G >= 20 && G <= 60 && B >= 10 && B <= 50) {
+            type = 'sludge';
+          } else if (R > 150 && G < 70 && B < 55) {
+            type = 'corrosion';
+          }
+          
+          blocks.push({r, c, type, R, G, B});
+        }
+      }
+
+      // Reject massive shadows triggering as cracks
+      let crackCount = blocks.filter(b => b.type === 'crack').length;
+      if (crackCount > 40) {
+        blocks.forEach(b => { if (b.type === 'crack') b.type = 'none'; });
+      }
+
+      let newRegions = [];
+      let currentRun = [];
+      
+      for(let i=0; i<blocks.length; i++) {
+        let b = blocks[i];
+        if (b.type !== 'none') {
+          if (currentRun.length === 0) {
+            currentRun.push(b);
+          } else {
+            let lastB = currentRun[currentRun.length-1];
+            // Must be adjacent in the same row
+            if (b.type === lastB.type && b.r === lastB.r && b.c === lastB.c + 1) {
+              currentRun.push(b);
+            } else {
+              processRun(currentRun, newRegions);
+              currentRun = [b];
+            }
+          }
+        } else {
+          processRun(currentRun, newRegions);
+          currentRun = [];
+        }
+      }
+      processRun(currentRun, newRegions);
+      
+      defectRegions = newRegions;
+      
+      // Alert system
+      let hasAlert = defectRegions.some(r => r.type === 'crack' || r.type === 'corrosion');
+      if (hasAlert) {
+        const now = Date.now();
+        if (now - lastAlertTime > 8000) {
+          showAlertBanner();
+          flashNavbar();
+          playBeep();
+          lastAlertTime = now;
+        }
+      }
+
+      let currentCounts = { crack: 0, algae: 0, sludge: 0, corrosion: 0 };
+      defectRegions.forEach(r => currentCounts[r.type]++);
+
+      defectRegions.forEach(r => {
+        if (currentCounts[r.type] > previousRegionCounts[r.type]) {
+          let logMsg = r.label;
+          if (r.type === 'crack') {
+            const lat = document.getElementById('lat-display').innerText.replace('LAT: ', '');
+            const lng = document.getElementById('lng-display').innerText.replace('LNG: ', '');
+            if (lat !== 'Unavailable' && lat !== '--') {
+              logMsg += ` at [${lat}, ${lng}]`;
+            }
+          }
+          addLog(logMsg, r.color, 99);
+          previousRegionCounts[r.type] = currentCounts[r.type];
+        }
+      });
+      previousRegionCounts = currentCounts;
+    }
+
+    function processRun(run, regions) {
+      if (run.length === 0) return;
+      const type = run[0].type;
+      
+      let minCount = 5;
+      if (type === 'crack') minCount = 6;
+      if (type === 'algae') minCount = 6;
+      if (type === 'sludge') minCount = 8;
+      if (type === 'corrosion') minCount = 5;
+      
+      if (run.length >= minCount) {
+        const minC = Math.min(...run.map(b => b.c));
+        const maxC = Math.max(...run.map(b => b.c));
+        const minR = Math.min(...run.map(b => b.r));
+        const maxR = Math.max(...run.map(b => b.r));
+        
+        const blockSize = 24;
+        const w = (maxC - minC + 1) * blockSize;
+        const h = (maxR - minR + 1) * blockSize;
+
+        if (type === 'crack') {
+          if (h > w * 3) return;
+          if (w < 60 && h < 40) return;
+        }
+        if (type === 'sludge') {
+          if (w < 80 || h < 50) return;
+        }
+        
+        let label, color;
+        if (type === 'crack') { label = '⚠ CRACK'; color = '#ff3d57'; }
+        if (type === 'algae') { label = '🟢 ALGAE'; color = '#39ff14'; }
+        if (type === 'sludge') { label = '🟠 SLUDGE'; color = '#ff8c00'; }
+        if (type === 'corrosion') { label = '🔶 CORROSION'; color = '#ffd700'; }
+        
+        regions.push({
+          type, label, color,
+          bbox: [minC*blockSize, minR*blockSize, w, h]
+        });
+      }
+    }
+
+    // Logs
+    function addLog(label, color, confidence) {
+      const now = Date.now();
+      const cooldownPeriod = 12000;
+      const suppressPeriod = 30000;
+
+      const baseLabel = label.split(' at ')[0];
+
+      if (!logFrequency.has(baseLabel)) logFrequency.set(baseLabel, []);
+      let times = logFrequency.get(baseLabel).filter(t => now - t < suppressPeriod);
+      
+      if (times.length > 3) {
+        logFrequency.set(baseLabel, times);
+        return;
+      }
+
+      if (logCooldowns.has(baseLabel) && (now - logCooldowns.get(baseLabel)) < cooldownPeriod) return;
+      
+      logCooldowns.set(baseLabel, now);
+      times.push(now);
+      logFrequency.set(baseLabel, times);
+
+      const container = document.getElementById('log-container');
+      const div = document.createElement('div');
+      div.className = 'log-entry';
+      div.style.borderLeft = `3px solid ${color}`;
+      
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      const badgeText = label.split(' ')[0] || "LOG";
+      div.innerHTML = `<span style="background:${color}; color:#0a0f1e; padding:2px 6px; border-radius:10px; font-weight:bold; font-size:9px;">${badgeText}</span> [${time}] ● ${label} — ${confidence}%`;
+      
+      container.appendChild(div);
+      
+      while (container.children.length > 30) {
+        container.removeChild(container.firstChild);
+      }
+
+      const entryCount = Array.from(container.children).filter(el => el.classList.contains('log-entry')).length;
+      if (entryCount > 0 && entryCount % 10 === 0) {
+        const divider = document.createElement('div');
+        divider.style.height = '1px';
+        divider.style.backgroundColor = '#1a2a4a';
+        divider.style.margin = '4px 0';
+        container.appendChild(divider);
+      }
+      
+      container.scrollTop = container.scrollHeight;
+    }
+
+    // Map & GPS
+    function setupMap() {
+      map = L.map('map', {zoomControl: false}).setView([13.0827, 80.2707], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap'
+      }).addTo(map);
+      
+      const icon = L.divIcon({className: 'rov-marker', iconSize: [14, 14]});
+      marker = L.marker([13.0827, 80.2707], {icon}).addTo(map);
+      
+      setTimeout(() => map.invalidateSize(), 500);
+      addLog("GPS — Searching...", "#00e5ff", 100);
+    }
+
+    function setupGPS() {
+      if (navigator.geolocation) {
+        startGPS(true);
+      } else {
+        showGPSError("Location not supported by device.");
+      }
+    }
+
+    function startGPS(highAccuracy) {
+      if (gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+      
+      gpsWatchId = navigator.geolocation.watchPosition(
+        pos => {
+          gpsRetryCount = 0;
+          if(!gpsActive) addLog("GPS — Locked", "#39ff14", 100);
+          gpsActive = true;
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const acc = pos.coords.accuracy;
+          
+          marker.setLatLng([lat, lng]);
+          map.panTo([lat, lng]);
+          
+          const latDir = lat >= 0 ? 'N' : 'S';
+          const lngDir = lng >= 0 ? 'E' : 'W';
+          document.getElementById('lat-display').innerText = `LAT: ${Math.abs(lat).toFixed(6)}° ${latDir}`;
+          document.getElementById('lng-display').innerText = `LNG: ${Math.abs(lng).toFixed(6)}° ${lngDir}`;
+          
+          let accColor = acc < 20 ? '#39ff14' : (acc <= 100 ? '#ffd700' : '#ff3d57');
+          let accText = document.getElementById('gps-acc-text');
+          if (!accText) {
+            accText = document.createElement('div');
+            accText.id = 'gps-acc-text';
+            accText.style.fontSize = '10px';
+            accText.style.marginTop = '4px';
+            document.getElementById('gps-coords').after(accText);
+          }
+          accText.style.color = accColor;
+          accText.innerText = `ACC: ±${Math.round(acc)}m`;
+          
+          const errText = document.getElementById('gps-error-msg');
+          if (errText) errText.remove();
+        },
+        err => {
+          gpsActive = false;
+          document.getElementById('lat-display').innerText = `LAT: Unavailable`;
+          document.getElementById('lng-display').innerText = `LNG: Unavailable`;
+          
+          const accText = document.getElementById('gps-acc-text');
+          if (accText) accText.remove();
+
+          let msg = "";
+          if (err.code === 1) { 
+            msg = "🔒 Location permission denied. Please enable in browser settings.";
+          } else if (err.code === 2) { 
+            if (highAccuracy) {
+              setTimeout(() => startGPS(false), 5000);
+              return;
+            }
+            msg = "⚠ GPS signal weak or unavailable.";
+          } else if (err.code === 3) { 
+            if (highAccuracy) {
+              startGPS(false);
+              return;
+            }
+            msg = "⏳ GPS request timed out.";
+          }
+          
+          gpsRetryCount++;
+          if (gpsRetryCount >= 2 && err.code !== 1) {
+            showGPSError(msg, true);
+          } else {
+            showGPSError(msg, false);
+          }
+        },
+        { 
+          enableHighAccuracy: highAccuracy, 
+          maximumAge: highAccuracy ? 5000 : 10000, 
+          timeout: highAccuracy ? 15000 : 20000 
+        }
+      );
+    }
+
+    function showGPSError(message, showRetryButton = false) {
+      let errContainer = document.getElementById('gps-error-msg');
+      if (!errContainer) {
+        errContainer = document.createElement('div');
+        errContainer.id = 'gps-error-msg';
+        errContainer.style.fontSize = '10px';
+        errContainer.style.marginTop = '4px';
+        errContainer.style.color = '#ff8c00';
+        document.getElementById('gps-coords').after(errContainer);
+      }
+      
+      errContainer.innerHTML = message;
+      
+      if (showRetryButton) {
+        errContainer.innerHTML += `<br/><span style="color:#8892b0">Using approximate location</span><br/>`;
+        const btn = document.createElement('button');
+        btn.innerText = "📍 Retry GPS";
+        btn.style.background = 'transparent';
+        btn.style.color = '#00e5ff';
+        btn.style.border = '1px solid #00e5ff';
+        btn.style.borderRadius = '4px';
+        btn.style.padding = '2px 6px';
+        btn.style.marginTop = '4px';
+        btn.style.cursor = 'pointer';
+        btn.onclick = () => {
+          errContainer.innerText = "Retrying...";
+          startGPS(true);
+        };
+        errContainer.appendChild(btn);
+      }
+    }
+
+    // Misc functions
+    function startClock() {
+      setInterval(() => {
+        const el = document.getElementById('clock');
+        if(el) el.innerText = new Date().toLocaleTimeString('en-US', { hour12: false });
+        const el2 = document.getElementById('nav-center');
+        if(el2 && !el) el2.innerText = new Date().toLocaleTimeString('en-US', { hour12: false });
+      }, 1000);
+    }
+
+    function setupSnapshot() {
+      document.getElementById('snap-btn').addEventListener('click', () => {
+        if(!cameraActive) return;
+        canvas.toBlob(blob => {
+          if(!blob) return;
+          const link = document.createElement('a');
+          link.href = URL.createObjectURL(blob);
+          link.download = `rov-snap-${Date.now()}.png`;
+          link.click();
+        });
+      });
+    }
+
+    function setupClearLog() {
+      document.getElementById('clear-log-btn').addEventListener('click', () => {
+        if(confirm("Clear all detection logs?")) {
+          document.getElementById('log-container').innerHTML = '';
+          logCooldowns.clear();
+          logFrequency.clear();
+        }
+      });
+    }
+
+    let alertInterval;
+    function showAlertBanner() {
+      const banner = document.getElementById('alert-banner');
+      const alertText = document.getElementById('alert-text');
+      const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+      alertText.innerText = `[${time}] ⚠️ CRACK DETECTED — Structural Risk`;
+      banner.style.display = 'flex';
+      setTimeout(() => banner.classList.add('show'), 10);
+      
+      let countdown = 3;
+      const btn = document.getElementById('alert-dismiss');
+      
+      if(alertInterval) clearInterval(alertInterval);
+      
+      alertInterval = setInterval(() => {
+        btn.innerText = `Auto-dismiss in ${countdown}... ✕`;
+        countdown--;
+        if (countdown < 0) {
+          clearInterval(alertInterval);
+          dismissAlert();
+        }
+      }, 1000);
+
+      btn.onclick = () => {
+        clearInterval(alertInterval);
+        dismissAlert();
+      };
+    }
+
+    function dismissAlert() {
+      const banner = document.getElementById('alert-banner');
+      banner.classList.remove('show');
+      setTimeout(() => { banner.style.display = 'none'; }, 300);
+      document.getElementById('alert-dismiss').innerText = '✕';
+    }
+
+    function flashNavbar() {
+      const nav = document.getElementById('navbar');
+      nav.style.backgroundColor = '#ff3d57';
+      setTimeout(() => {
+        nav.style.backgroundColor = '#0a0f1e';
+      }, 1000);
+    }
+
+    function playBeep() {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioContext();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.3);
+      } catch(e) {}
+    }
+
+    function startStatsAnimation() {
+      setInterval(() => {
+        const batt = Math.floor(Math.random() * (89 - 85 + 1)) + 85;
+        document.getElementById('stat-batt').innerText = `${batt}%`;
+        
+        const tempElement = document.getElementById('stat-temp');
+        if (tempElement) tempElement.innerText = `${(23.5 + Math.random()).toFixed(1)}°C`;
+        
+        const presElement = document.getElementById('stat-pres');
+        if (presElement) presElement.innerText = `${(1.0 + Math.random() * 0.05).toFixed(2)} atm`;
+      }, 10000);
+
+      setInterval(() => {
+        const sig = document.getElementById('stat-sig');
+        if (gpsActive) { sig.innerText = '● Strong'; sig.style.color = '#39ff14'; }
+        else { sig.innerText = '◌ Weak'; sig.style.color = '#ff8c00'; }
+      }, 3000);
+
+      setInterval(() => {
+        const mode = document.getElementById('stat-mode');
+        mode.innerText = mode.innerText === 'Autonomous' ? 'Scanning' : 'Autonomous';
+      }, 8000);
+    }
+
+    function startSystemStatusLoop() {
+      setInterval(() => {
+        const status = document.getElementById('nav-right');
+        if (cameraActive && gpsActive) {
+          status.innerText = '● ALL SYSTEMS ONLINE';
+          status.style.color = '#39ff14';
+          status.style.background = 'rgba(0, 255, 0, 0.1)';
+        } else if (cameraActive && !gpsActive) {
+          status.innerText = '◐ CAM ONLY';
+          status.style.color = '#ffd700';
+          status.style.background = 'rgba(255, 215, 0, 0.1)';
+        } else {
+          status.innerText = '○ OFFLINE';
+          status.style.color = '#ff3d57';
+          status.style.background = 'rgba(255, 61, 87, 0.1)';
+        }
+      }, 5000);
+    }
+
+    // Start everything
+    window.onload = init;
+  </script>
+</body>
+</html>
