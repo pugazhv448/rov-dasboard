@@ -1149,6 +1149,7 @@
     }
   </style>
 
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
   <script>
     (function() {
       const btn = document.getElementById('shutdown-btn');
@@ -1248,11 +1249,34 @@
 
       initObserver();
 
-      btn.addEventListener('click', () => {
-        if (navigator.vibrate) navigator.vibrate(50);
-        
-        isShutdown = !isShutdown;
-        
+      // MQTT Cross-Device Synchronization
+      const mqttClient = mqtt.connect('wss://broker.emqx.io:8084/mqtt');
+      const syncTopic = 'pugazhv448/rov-dashboard/shutdown-sync/v1';
+
+      mqttClient.on('connect', () => {
+        console.log('Connected to global sync broker');
+        mqttClient.subscribe(syncTopic);
+      });
+
+      mqttClient.on('message', (topic, message) => {
+        if (topic === syncTopic) {
+          try {
+            const data = JSON.parse(message.toString());
+            if (data.isShutdown !== isShutdown) {
+              applyShutdownState(data.isShutdown, false); // false = don't publish back to avoid loop
+            }
+          } catch(e) {}
+        }
+      });
+
+      function applyShutdownState(newState, publish = true) {
+        if (isShutdown === newState) return;
+        isShutdown = newState;
+
+        if (publish && mqttClient.connected) {
+          mqttClient.publish(syncTopic, JSON.stringify({ isShutdown: isShutdown }), { retain: true });
+        }
+
         if (isShutdown) {
           btn.classList.add('off');
           overlay.classList.add('active');
@@ -1271,6 +1295,11 @@
           void document.body.offsetWidth; // trigger reflow
           document.body.classList.add('boot-anim');
         }
+      }
+
+      btn.addEventListener('click', () => {
+        if (navigator.vibrate) navigator.vibrate(50);
+        applyShutdownState(!isShutdown, true);
       });
     })();
   </script>
