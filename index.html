@@ -1065,5 +1065,214 @@
     // Start everything
     window.onload = init;
   </script>
+  <!-- FLOATING SHUTDOWN BUTTON MODULE -->
+  <div id="shutdown-overlay" class="shutdown-overlay">
+    <h2>ROV SYSTEM OFFLINE</h2>
+  </div>
+  <div id="shutdown-btn" class="shutdown-btn">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path><line x1="12" y1="2" x2="12" y2="12"></line></svg>
+  </div>
+
+  <style>
+    .shutdown-btn {
+      display: none;
+    }
+    @media (max-width: 768px) {
+      .shutdown-btn {
+        display: flex;
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background-color: #39ff14;
+        color: #0a0f1e;
+        box-shadow: 0 0 15px rgba(57, 255, 20, 0.4);
+        z-index: 4000;
+        cursor: pointer;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.3s ease;
+      }
+      .shutdown-btn.off {
+        background-color: #ff3d57;
+        box-shadow: 0 0 15px rgba(255, 61, 87, 0.4);
+        color: white;
+      }
+      .shutdown-btn svg {
+        width: 28px;
+        height: 28px;
+      }
+    }
+
+    .shutdown-overlay {
+      position: fixed;
+      top: 60px;
+      left: 0;
+      width: 100%;
+      height: calc(100% - 60px);
+      background: rgba(10, 15, 30, 0.8);
+      backdrop-filter: blur(6px);
+      -webkit-backdrop-filter: blur(6px);
+      z-index: 3000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.5s ease;
+    }
+    .shutdown-overlay.active {
+      opacity: 1;
+      pointer-events: all;
+    }
+    .shutdown-overlay h2 {
+      color: #ff3d57;
+      font-size: 28px;
+      font-family: 'Rajdhani', sans-serif;
+      letter-spacing: 4px;
+      text-shadow: 0 0 20px rgba(255, 61, 87, 0.8);
+      animation: blinkOffline 2s infinite;
+    }
+    @keyframes blinkOffline {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+
+    .boot-anim {
+      animation: bootFlash 1s ease-out;
+    }
+    @keyframes bootFlash {
+      0% { filter: brightness(2) contrast(1.2); }
+      100% { filter: brightness(1) contrast(1); }
+    }
+  </style>
+
+  <script>
+    (function() {
+      const btn = document.getElementById('shutdown-btn');
+      const overlay = document.getElementById('shutdown-overlay');
+      let isShutdown = false;
+
+      const statBatt = document.getElementById('stat-batt');
+      const statTemp = document.getElementById('stat-temp');
+      const statPres = document.getElementById('stat-pres');
+      const statSig = document.getElementById('stat-sig');
+      const statMode = document.getElementById('stat-mode');
+      const latDisplay = document.getElementById('lat-display');
+      const lngDisplay = document.getElementById('lng-display');
+      const navRight = document.getElementById('nav-right');
+      
+      const speedLabel = Array.from(document.querySelectorAll('.stat-label')).find(el => el.innerText.includes('Speed'));
+      const speedDisplay = speedLabel ? speedLabel.nextElementSibling : null;
+
+      let saved = {};
+
+      function saveValues() {
+        if (statBatt) saved.batt = statBatt.innerText;
+        if (statTemp) saved.temp = statTemp.innerText;
+        if (statPres) saved.pres = statPres.innerText;
+        if (statSig) { saved.sig = statSig.innerText; saved.sigColor = statSig.style.color; }
+        if (statMode) saved.mode = statMode.innerText;
+        if (latDisplay) saved.lat = latDisplay.innerText;
+        if (lngDisplay) saved.lng = lngDisplay.innerText;
+        if (navRight) { saved.navText = navRight.innerText; saved.navColor = navRight.style.color; saved.navBg = navRight.style.background; }
+        if (speedDisplay) saved.speed = speedDisplay.innerText;
+      }
+
+      function restoreValues() {
+        if (statBatt && saved.batt !== undefined) statBatt.innerText = saved.batt;
+        if (statTemp && saved.temp !== undefined) statTemp.innerText = saved.temp;
+        if (statPres && saved.pres !== undefined) statPres.innerText = saved.pres;
+        if (statSig && saved.sig !== undefined) { statSig.innerText = saved.sig; statSig.style.color = saved.sigColor; }
+        if (statMode && saved.mode !== undefined) statMode.innerText = saved.mode;
+        if (latDisplay && saved.lat !== undefined) latDisplay.innerText = saved.lat;
+        if (lngDisplay && saved.lng !== undefined) lngDisplay.innerText = saved.lng;
+        if (navRight && saved.navText !== undefined) { navRight.innerText = saved.navText; navRight.style.color = saved.navColor; navRight.style.background = saved.navBg; }
+        if (speedDisplay && saved.speed !== undefined) speedDisplay.innerText = saved.speed;
+      }
+
+      function forceOverrideNow() {
+        if (statBatt && statBatt.innerText !== '0%') { saved.batt = statBatt.innerText; statBatt.innerText = '0%'; }
+        if (statTemp && statTemp.innerText !== '0.0°C') { saved.temp = statTemp.innerText; statTemp.innerText = '0.0°C'; }
+        if (statPres && statPres.innerText !== '0.00 atm') { saved.pres = statPres.innerText; statPres.innerText = '0.00 atm'; }
+        
+        if (statSig) {
+          if (statSig.innerText !== '◌ None') { saved.sig = statSig.innerText; statSig.innerText = '◌ None'; }
+          const currColor = statSig.style.color || '';
+          if (!currColor.includes('255, 61, 87') && !currColor.includes('ff3d57') && !currColor.includes('rgb(255, 61, 87)')) { 
+            saved.sigColor = currColor; statSig.style.color = '#ff3d57'; 
+          }
+        }
+
+        if (statMode && statMode.innerText !== 'OFFLINE') { saved.mode = statMode.innerText; statMode.innerText = 'OFFLINE'; }
+        if (latDisplay && latDisplay.innerText !== 'LAT: Disconnected') { saved.lat = latDisplay.innerText; latDisplay.innerText = 'LAT: Disconnected'; }
+        if (lngDisplay && lngDisplay.innerText !== 'LNG: Disconnected') { saved.lng = lngDisplay.innerText; lngDisplay.innerText = 'LNG: Disconnected'; }
+        
+        if (navRight) {
+          if (navRight.innerText !== '○ OFFLINE') { saved.navText = navRight.innerText; navRight.innerText = '○ OFFLINE'; }
+          const currColor = navRight.style.color || '';
+          if (!currColor.includes('255, 61, 87') && !currColor.includes('ff3d57') && !currColor.includes('rgb(255, 61, 87)')) {
+            saved.navColor = currColor; navRight.style.color = '#ff3d57';
+          }
+          const currBg = navRight.style.background || '';
+          if (!currBg.includes('255, 61, 87') && !currBg.includes('ff3d57') && !currBg.includes('rgba(255, 61, 87, 0.1)')) {
+            saved.navBg = currBg; navRight.style.background = 'rgba(255, 61, 87, 0.1)';
+          }
+        }
+        
+        if (speedDisplay && speedDisplay.innerText !== '0.0 m/s') { saved.speed = speedDisplay.innerText; speedDisplay.innerText = '0.0 m/s'; }
+      }
+
+      const observer = new MutationObserver((mutations) => {
+        if (!isShutdown) return;
+        observer.disconnect();
+        forceOverrideNow();
+        initObserver();
+      });
+
+      const observerConfig = { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ['style'] };
+
+      function initObserver() {
+        if (statBatt) observer.observe(statBatt, observerConfig);
+        if (statTemp) observer.observe(statTemp, observerConfig);
+        if (statPres) observer.observe(statPres, observerConfig);
+        if (statSig) observer.observe(statSig, observerConfig);
+        if (statMode) observer.observe(statMode, observerConfig);
+        if (latDisplay) observer.observe(latDisplay, observerConfig);
+        if (lngDisplay) observer.observe(lngDisplay, observerConfig);
+        if (navRight) observer.observe(navRight, observerConfig);
+        if (speedDisplay) observer.observe(speedDisplay, observerConfig);
+      }
+
+      initObserver();
+
+      btn.addEventListener('click', () => {
+        if (navigator.vibrate) navigator.vibrate(50);
+        
+        isShutdown = !isShutdown;
+        
+        if (isShutdown) {
+          btn.classList.add('off');
+          overlay.classList.add('active');
+          observer.disconnect();
+          saveValues();
+          forceOverrideNow();
+          initObserver();
+        } else {
+          btn.classList.remove('off');
+          overlay.classList.remove('active');
+          observer.disconnect();
+          restoreValues();
+          initObserver();
+          
+          document.body.classList.remove('boot-anim');
+          void document.body.offsetWidth; // trigger reflow
+          document.body.classList.add('boot-anim');
+        }
+      });
+    })();
+  </script>
 </body>
 </html>
